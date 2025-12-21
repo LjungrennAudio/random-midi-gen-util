@@ -1,7 +1,6 @@
 use clap::{Parser, ValueEnum};
-use midly::{
-    Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
-};
+use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::fs;
@@ -14,12 +13,19 @@ enum ScaleOpt {
     MajorPentatonic,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Note(u8);
+
 #[derive(Debug, Parser)]
-#[command(name = "midi-seed-gen", version, about = "Seeded random MIDI (format 0) generator")]
+#[command(
+    name = "midi-seed-gen",
+    version,
+    about = "Seeded random MIDI (format 0) generator"
+)]
 struct Cli {
-    /// Output .mid path
-    #[arg(short, long, default_value = "out/seeded.mid")]
-    out: String,
+    /// Output .mid path (if omitted, a timestamped name is generated)
+    #[arg(short, long)]
+    out: Option<String>,
 
     /// RNG seed (same seed => same MIDI)
     #[arg(long, default_value_t = 0xC0FFEEu64)]
@@ -37,10 +43,12 @@ struct Cli {
     #[arg(long, default_value_t = 480u16)]
     ppqn: u16,
 
-    /// Root MIDI note number (60=C4)
-    #[arg(long, default_value_t = 60u8)]
-    root: u8,
-
+    /// Root note in scientific pitch notation (e.g. C4, A3, F#5, Db2)
+    #[arg(long, default_value = "C4")]
+    root: Note,
+    // [formerly] Root MIDI note number (60=C4)
+    // #[arg(long, default_value_t = 60u8)]
+    // root: u8,
     /// Scale / mode
     #[arg(long, value_enum, default_value_t = ScaleOpt::MinorPentatonic)]
     scale: ScaleOpt,
@@ -52,6 +60,82 @@ struct Cli {
     /// Program (0..127). 0 = Acoustic Grand Piano in General MIDI.
     #[arg(long, default_value_t = 0u8)]
     program: u8,
+}
+
+impl Note {
+    fn as_u8(self) -> u8 {
+        self.0
+    }
+}
+
+impl std::str::FromStr for Note {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let s = input.trim();
+        if s.is_empty() {
+            return Err("empty note".into());
+        }
+
+        let mut it = s.chars();
+
+        // Letter
+        let letter = it.next().ok_or_else(|| "empty note".to_string())?;
+        let base_pc: i32 = match letter.to_ascii_uppercase() {
+            'C' => 0,
+            'D' => 2,
+            'E' => 4,
+            'F' => 5,
+            'G' => 7,
+            'A' => 9,
+            'B' => 11,
+            _ => return Err(format!("bad note letter: {letter}")),
+        };
+
+        // Optional accidental
+        let mut pc = base_pc;
+        let mut octave_str = it.as_str(); // remaining tail, no allocation
+
+        if let Some(acc) = it.clone().next() {
+            match acc {
+                '#' | '♯' => {
+                    pc += 1;
+                    it.next(); // consume it
+                    octave_str = it.as_str();
+                }
+                'b' | 'B' | '♭' => {
+                    pc -= 1;
+                    it.next(); // consume it
+                    octave_str = it.as_str();
+                }
+                _ => {}
+            }
+        }
+
+        let octave_str = octave_str.trim();
+        if octave_str.is_empty() {
+            return Err("missing octave, expected like C#4".into());
+        }
+
+        let octave: i32 = octave_str
+            .parse()
+            .map_err(|_| format!("bad octave: {octave_str}"))?;
+
+        // C4 = 60 mapping (SPN convention); MIDI standardizes Middle C as 60, but octave label conventions vary. [web:109]
+        let midi: i32 = (octave + 1) * 12 + pc;
+
+        if !(0..=127).contains(&midi) {
+            return Err(format!("note out of MIDI range 0..127: {midi}"));
+        }
+
+        Ok(Note(midi as u8))
+    }
+}
+
+// Generate default output path if none provided
+fn default_out_path(seed: u64) -> String {
+    let ts = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string(); // formatting via chrono [web:139]
+    format!("out/seeded_{ts}_{seed}.mid")
 }
 
 fn bpm_to_us_per_quarter(bpm: u32) -> u32 {
@@ -95,6 +179,12 @@ fn event_order_key(kind: &TrackEventKind) -> u8 {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse(); // clap derive parsing [web:68]
 
+    // Determine output path
+    let out_path = cli
+        .out
+        .clone()
+        .unwrap_or_else(|| default_out_path(cli.seed));
+
     // Basic argument sanity
     if cli.channel > 15 {
         return Err("channel must be 0..15".into());
@@ -106,7 +196,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rng = ChaCha8Rng::seed_from_u64(cli.seed);
 
     let scale = scale_semitones(cli.scale);
-    let base_note = cli.root as i16;
+    // Root note in scientific pitch notation (e.g. C4, A3, F#5, Db2)
+    let base_note = cli.root.as_u8() as i16;
+    // [formerly] Root MIDI note number (60=C4)
+    // let base_note = cli.root as i16;
 
     // 4/4 grid: 16 steps per bar => 1/16 note per step.
     let steps_per_bar = 16u32;
@@ -181,7 +274,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let note_u8 = note_i16.clamp(0, 127) as u8;
 
         // Duration in steps (1..4) with weights.
-        let dur_steps: u32 = weighted_choice(&mut rng, &[(1, 40), (2, 30), (3, 10), (4, 20)]) as u32;
+        let dur_steps: u32 =
+            weighted_choice(&mut rng, &[(1, 40), (2, 30), (3, 10), (4, 20)]) as u32;
 
         let t1 = (t0 + dur_steps * step_ticks).min(song_len_ticks);
 
@@ -214,7 +308,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Sort and ensure sensible ordering at identical timestamps.
     abs_events.sort_by(|(ta, ea), (tb, eb)| {
-        ta.cmp(tb).then_with(|| event_order_key(ea).cmp(&event_order_key(eb)))
+        ta.cmp(tb)
+            .then_with(|| event_order_key(ea).cmp(&event_order_key(eb)))
     });
 
     // Convert abs->delta and build the single track. [web:91]
@@ -224,7 +319,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let delta = tick.saturating_sub(last_tick);
         last_tick = tick;
         track.push(TrackEvent {
-            delta: (delta as u32).into(),
+            delta: delta.into(), 
             kind,
         });
     }
@@ -243,13 +338,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Write file
-    if let Some(parent) = std::path::Path::new(&cli.out).parent() {
+    if let Some(parent) = std::path::Path::new(&out_path).parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)?;
         }
     }
-    smf.save(&cli.out)?; // midly save helper [web:36]
-
-    eprintln!("Wrote {}", cli.out);
+    smf.save(&out_path)?; // midly save helper
+    eprintln!("Wrote {}", out_path);
     Ok(())
 }
