@@ -22,7 +22,7 @@
 
 
 <p align="center">
-  <img src="random-midi-gen-util.png" width="850" alt="random-midi-gen-util Banner">
+  <img src="assets/random-midi-gen-util.png" width="850" alt="random-midi-gen-util Banner">
 
 
 ---
