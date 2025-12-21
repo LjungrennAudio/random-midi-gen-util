@@ -7,12 +7,12 @@
   <a href="https://github.com/ljunggrenaudio/random-midi-gen-util/actions"> 
     <img src="https://img.shields.io/github/actions/workflow/status/ljunggrenaudio/random-midi-gen-util/lint-and-plot.yml?label=build" alt="Build Status"> 
   </a>
-  <a href="https://github.com/whisprer/woflang-alpha-r/blob/main/LICENSE"> 
+  <a href="https://github.com/ljunggrenaudio/random-midi-gen-util/blob/main/LICENSE"> 
     <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"> 
     <img src="https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg" alt="License">
   </a>
   <img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Rust">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C-lightgrey.svg" alt="Platform">
 </p>
 
 ![Commits](https://img.shields.io/github/commit-activity/m/ljunggrenaudio/random-midi-gen-util?label=commits) 
