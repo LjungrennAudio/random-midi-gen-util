@@ -18,7 +18,7 @@
 ![Commits](https://img.shields.io/github/commit-activity/m/ljunggrenaudio/random-midi-gen-util?label=commits) 
 ![Last Commit](https://img.shields.io/github/last-commit/ljunggrenaudio/random-midi-gen-util) 
 ![Issues](https://img.shields.io/github/issues/ljunggrenaudio/random-midi-gen-util) 
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/ljunggrenaudio/random-midi-gen-util) 
+[![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)](https://github.com/ljunggrenaudio/random-midi-gen-util) 
 
 
 <p align="center">
